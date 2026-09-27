@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Scanner QR Presenze</title>
+    <!-- Libreria ufficiale per la lettura dei QR code -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <style>
+      body { font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 15px; background: #f4f4f9; }
+      #reader { width: 100%; max-width: 400px; margin: 15px auto; border-radius: 8px; overflow: hidden; background: #000; }
+      #result { margin-top: 15px; font-size: 1.1em; font-weight: bold; padding: 12px; border-radius: 5px; }
+      .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+      .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+      .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+      .controls { margin: 15px 0; }
+      .manual-box { margin-top: 20px; border-top: 1px solid #ddd; padding-top: 15px; }
+      input[type="text"] { padding: 10px; font-size: 1em; width: 60%; max-width: 250px; border: 1px solid #ccc; border-radius: 4px; }
+      button { padding: 10px 18px; font-size: 1em; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 4px; }
+      button:hover { background: #0056b3; }
+      .btn-stop { background: #dc3545; }
+      .btn-stop:hover { background: #c82333; }
+    </style>
+  </head>
+  <body>
+
+    <h2>Scanner Presenze QR</h2>
+
+    <div class="controls">
+      <button onclick="avviaScanner()">📷 Avvia Fotocamera</button>
+      <button class="btn-stop" onclick="fermaScanner()">⏹️ Spegni Camera</button>
+    </div>
+
+    <div id="reader"></div>
+
+    <div id="result">Pronto per la scansione...</div>
+
+    <div class="manual-box">
+      <input type="text" id="manualCode" placeholder="Inserisci codice a mano" autocomplete="off">
+      <button onclick="inviaCodiceManuale()">Invia</button>
+    </div>
+
+    <script>
+      // ==========================================================
+      // IMPORTANTE: incolla qui sotto l'URL della tua Web App
+      // (Distribuisci > Gestisci distribuzioni > copia URL "/exec")
+      // ==========================================================
+      const WEBAPP_URL = "INCOLLA_QUI_URL_WEBAPP/exec";
+
+      let html5QrCode = null;
+      let isScanning = false;
+
+      function onScanSuccess(decodedText, decodedResult) {
+        if (!isScanning) return;
+        isScanning = false; // Blocca temporaneamente per evitare letture duplicate immediate
+
+        document.getElementById('result').innerHTML = "Elaborazione in corso...";
+        document.getElementById('result').className = "";
+
+        inviaAlBackend(decodedText);
+      }
+
+      function avviaScanner() {
+        const resDiv = document.getElementById('result');
+        resDiv.innerHTML = "Avvio fotocamera in corso...";
+        resDiv.className = "";
+
+        if (!html5QrCode) {
+          html5QrCode = new Html5Qrcode("reader");
+        }
+
+        html5QrCode.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: { width: 220, height: 220 }
+          },
+          onScanSuccess,
+          (errorMessage) => {
+            // Ignora i singoli errori di frame quando non inquadra il codice
+          }
+        ).then(() => {
+          isScanning = true;
+          resDiv.innerHTML = "Inquadra il QR code...";
+        }).catch(err => {
+          resDiv.className = "error";
+          resDiv.innerHTML = "❌ Impossibile avviare la fotocamera. Controlla i permessi del browser.";
+          console.error(err);
+        });
+      }
+
+      function fermaScanner() {
+        if (html5QrCode) {
+          html5QrCode.stop().then(() => {
+            isScanning = false;
+            document.getElementById('result').innerHTML = "Fotocamera spenta.";
+            document.getElementById('result').className = "";
+          }).catch(err => {
+            console.log("Errore arresto", err);
+          });
+        }
+      }
+
+      // Invia il codice al backend Apps Script via fetch (POST).
+      // Content-Type "text/plain" evita il preflight CORS, che le
+      // Web App di Apps Script non gestiscono correttamente.
+      function inviaAlBackend(codice) {
+        fetch(WEBAPP_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ codice: codice })
+        })
+          .then(r => r.json())
+          .then(mostraRisultato)
+          .catch(mostraErrore);
+      }
+
+      function mostraRisultato(response) {
+        const resDiv = document.getElementById('result');
+        if (response.success) {
+          if (response.alreadyChecked) {
+            resDiv.className = "warning";
+            resDiv.innerHTML = "⚠️ ATTENZIONE: <b>" + response.nome + "</b> era già stato spuntato!";
+          } else {
+            resDiv.className = "success";
+            resDiv.innerHTML = "✅ Registrato: <b>" + response.nome + "</b>";
+          }
+        } else {
+          resDiv.className = "error";
+          resDiv.innerHTML = "❌ " + response.message;
+        }
+
+        setTimeout(() => {
+          isScanning = true;
+          resDiv.innerHTML = "Pronto per la prossima scansione...";
+          resDiv.className = "";
+        }, 2500);
+      }
+
+      function mostraErrore(error) {
+        const resDiv = document.getElementById('result');
+        resDiv.className = "error";
+        resDiv.innerHTML = "❌ Errore di comunicazione: " + error.message;
+        isScanning = true;
+      }
+
+      function inviaCodiceManuale() {
+        const inputField = document.getElementById('manualCode');
+        const val = inputField.value.trim();
+        if (val) {
+          isScanning = false;
+          inviaAlBackend(val);
+          inputField.value = "";
+        }
+      }
+    </script>
+  </body>
+</html>
