@@ -45,7 +45,7 @@
       // IMPORTANTE: incolla qui sotto l'URL della tua Web App
       // (Distribuisci > Gestisci distribuzioni > copia URL "/exec")
       // ==========================================================
-      const WEBAPP_URL = "INCOLLA_QUI_URL_WEBAPP/exec";
+      const WEBAPP_URL = "https://script.google.com/macros/s/AKfycby1UEP9CiYybcgrsk5hyZ5dbC1A_fge0orM4hNWKN5xtvisyXn_Cmo0q46pAOql32pt7w/exec";
 
       let html5QrCode = null;
       let isScanning = false;
@@ -110,7 +110,11 @@
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ codice: codice })
         })
-          .then(r => r.json())
+          .then(r => r.text()) // prima leggi come testo per poter fare debug
+          .then(text => {
+            console.log("Risposta grezza dal server:", text); // controlla qui in console
+            return JSON.parse(text);
+          })
           .then(mostraRisultato)
           .catch(mostraErrore);
       }
